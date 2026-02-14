@@ -1,31 +1,188 @@
-# Built things
-_Debug/
-Compiled/
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>코인점프 어드벤처 완전판</title>
+<style>
+body { margin:0; background:#87ceeb; font-family:sans-serif; text-align:center;}
+#game { position:relative; width:400px; height:200px; margin:20px auto; background:#98fb98; overflow:hidden; border:2px solid #333;}
+#player { width:20px; height:20px; position:absolute; bottom:0; left:0; background:red;}
+#lumy { width:15px; height:15px; position:absolute; bottom:0; left:0; background:pink;}
+.coin { width:10px; height:10px; position:absolute; bottom:0; background:gold;}
+.obstacle { width:20px; height:20px; position:absolute; bottom:0; background:brown;}
+#boss { width:40px; height:40px; position:absolute; bottom:0; left:350px; background:purple; display:none;}
+#info { margin-top:10px; font-size:16px;}
+#controls { margin-top:10px;}
+.control-btn { width:50px; height:50px; font-size:20px; margin:3px;}
+.attack { width:10px; height:10px; position:absolute; display:none; background:orange;}
+</style>
+</head>
+<body>
 
-# AudioCache can be rebuilt from sources
-AudioCache/
+<h2>코인점프 어드벤처 완전판</h2>
+<div id="game">
+  <div id="player"></div>
+  <div id="lumy"></div>
+  <div id="boss"></div>
+</div>
+<div id="info">코인: 0</div>
+<div id="controls">
+  <button class="control-btn" id="leftBtn">◀</button>
+  <button class="control-btn" id="jumpBtn">JUMP</button>
+  <button class="control-btn" id="attackBtn">ATTACK</button>
+  <button class="control-btn" id="rightBtn">▶</button>
+</div>
 
-# Lockfile
-_OpenInEditor.lock
+<script>
+const game=document.getElementById('game');
+const player=document.getElementById('player');
+const lumy=document.getElementById('lumy');
+const boss=document.getElementById('boss');
+const info=document.getElementById('info');
 
-# User settings
-Game.agf.user
-*.crm.user
+let playerPos=0, playerBottom=0, coins=0;
+let moveSpeed=5, movingLeft=false, movingRight=false;
+let leftInterval,rightInterval;
 
-# Backups
-Game.agf.bak
-backup_acsprset.spr
+// 저장된 코인 불러오기
+if(localStorage.getItem('coinjump_coins')){
+    coins=parseInt(localStorage.getItem('coinjump_coins'));
+    info.innerText='코인: '+coins;
+}
 
-# Memory dumps
-*.dmp
+// 장애물 & 코인
+const obstacles=[], coinsArr=[];
+for(let i=1;i<=8;i++){
+    if(Math.random()<0.4){
+        let ob=document.createElement('div'); ob.className='obstacle';
+        ob.style.left=(i*40)+'px'; game.appendChild(ob);
+        obstacles.push({el:ob,pos:i*40});
+    }
+    if(Math.random()<0.6){
+        let c=document.createElement('div'); c.className='coin';
+        c.style.left=(i*40+15)+'px'; game.appendChild(c);
+        coinsArr.push({el:c,pos:i*40+15,collected:false});
+    }
+}
 
-# Temporary files
-# temporarily created during sprite or room background compression
-~aclzw.tmp
-# temporary, main game data, before getting packed into exe
-game28.dta
-# temporary build of the game before being moved to Compiled/ folder
-*.exe
+// 키보드
+document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight') movingRight=true;
+    if(e.key==='ArrowLeft') movingLeft=true;
+    if(e.key==='ArrowUp') jump();
+    if(e.key===' ') attack();
+});
+document.addEventListener('keyup',e=>{
+    if(e.key==='ArrowRight') movingRight=false;
+    if(e.key==='ArrowLeft') movingLeft=false;
+});
 
-# Log files
-warnings.log
+// 모바일 터치
+const leftBtn=document.getElementById('leftBtn');
+const rightBtn=document.getElementById('rightBtn');
+const jumpBtn=document.getElementById('jumpBtn');
+const attackBtn=document.getElementById('attackBtn');
+
+leftBtn.addEventListener('touchstart',()=>{ leftInterval=setInterval(()=>move(-moveSpeed),50); });
+leftBtn.addEventListener('touchend',()=>{ clearInterval(leftInterval); movingLeft=false; });
+rightBtn.addEventListener('touchstart',()=>{ rightInterval=setInterval(()=>move(moveSpeed),50); });
+rightBtn.addEventListener('touchend',()=>{ clearInterval(rightInterval); movingRight=false; });
+jumpBtn.addEventListener('touchstart',()=>jump());
+attackBtn.addEventListener('touchstart', attack);
+attackBtn.addEventListener('mousedown', attack); // PC 클릭 지원
+
+// 이동
+function move(speed){
+    playerPos+=speed;
+    if(playerPos<0) playerPos=0;
+    if(playerPos>380) playerPos=380;
+    player.style.left=playerPos+'px';
+    lumy.style.left=(playerPos-20>0?playerPos-20:0)+'px';
+    checkCollision();
+    checkCoins();
+}
+
+// 점프
+function jump(){
+    if(playerBottom>0) return;
+    let up=0;
+    const jumpInterval=setInterval(()=>{
+        if(up<50){ playerBottom+=5; up+=5; player.style.bottom=playerBottom+'px'; lumy.style.bottom=(playerBottom-5>0?playerBottom-5:0)+'px'; }
+        else { clearInterval(jumpInterval);
+            const downInterval=setInterval(()=>{
+                if(playerBottom>0){ playerBottom-=5; player.style.bottom=playerBottom+'px'; lumy.style.bottom=(playerBottom-5>0?playerBottom-5:0)+'px'; }
+                else clearInterval(downInterval);
+            },20);
+        }
+    },20);
+}
+
+// 공격
+function attack(){
+    const atk=document.createElement('div'); atk.className='attack';
+    atk.style.left=(playerPos+10)+'px'; atk.style.bottom=playerBottom+'px';
+    game.appendChild(atk); atk.style.display='block';
+    const atkInterval=setInterval(()=>{
+        let atkPos=parseInt(atk.style.left);
+        if(atkPos>400){ atk.remove(); clearInterval(atkInterval); return; }
+        atk.style.left=(atkPos+10)+'px';
+        if(boss.style.display==='block' && Math.abs(atkPos-parseInt(boss.style.left))<30){
+            alert('보스 맞춤! 🎉'); boss.style.display='none';
+            atk.remove(); clearInterval(atkInterval);
+        }
+    },30);
+}
+
+// 충돌/코인 체크
+function checkCollision(){
+    for(let ob of obstacles){
+        if(Math.abs(playerPos-ob.pos)<20 && playerBottom<20){
+            alert('장애물 충돌! 게임 종료 😵\n최종 코인: '+coins);
+            resetGame();
+        }
+    }
+}
+function checkCoins(){
+    for(let c of coinsArr){
+        if(!c.collected && Math.abs(playerPos-c.pos)<15 && playerBottom<30){
+            coins++; info.innerText='코인: '+coins;
+            localStorage.setItem('coinjump_coins',coins);
+            c.el.style.display='none'; c.collected=true;
+        }
+    }
+}
+
+// 루미 자동 코인 수집
+setInterval(()=>{
+    for(let c of coinsArr){
+        if(!c.collected && Math.abs(playerPos-c.pos)<50 && playerBottom<30){
+            coins++; info.innerText='코인: '+coins;
+            localStorage.setItem('coinjump_coins',coins);
+            c.el.style.display='none'; c.collected=true;
+        }
+    }
+},200);
+
+// 지속 이동 + 속도 증가
+setInterval(()=>{
+    if(movingLeft) move(-moveSpeed);
+    if(movingRight) move(moveSpeed);
+    if(boss.style.display==='none' && moveSpeed<15) moveSpeed+=0.005;
+},50);
+
+// 보스 등장
+setTimeout(()=>{ boss.style.display='block'; },10000);
+
+// 초기화
+function resetGame(){
+    playerPos=0; playerBottom=0; coins=0; moveSpeed=5;
+    player.style.left='0px'; player.style.bottom='0px'; lumy.style.left='0px'; lumy.style.bottom='0px';
+    info.innerText='코인: 0'; localStorage.setItem('coinjump_coins',0);
+    movingLeft=false; movingRight=false;
+    clearInterval(leftInterval); clearInterval(rightInterval);
+    for(let c of coinsArr){ c.collected=false; c.el.style.display='block'; }
+    boss.style.display='block';
+}
+</script>
+</body>
+    </html>
